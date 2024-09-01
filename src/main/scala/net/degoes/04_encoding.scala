@@ -98,14 +98,24 @@ object contact_processing2:
   import contact_processing.*
 
   enum SchemaMapping2:
-    case Dummy
+    case Combined(mappings: SchemaMapping2*)
+    case SingleMapping
+    case TryBranch(success: SchemaMapping2, fail: Option[SchemaMapping2])
 
     /** EXERCISE 1
       *
       * Add a `+` operator that models combining two schema mappings into one, applying the effects
       * of both in sequential order.
       */
-    def +(that: SchemaMapping2): SchemaMapping2 = ???
+    def +(that: SchemaMapping2): SchemaMapping2 =
+      (this, that) match
+        case (Combined(mappings1*), Combined(mappings2*)) => Combined((mappings1 ++ mappings2)*)
+        case (Combined(mappings*), sm@SingleMapping) => Combined((mappings :+ sm)*)
+        case (sm@SingleMapping, Combined(mappings*)) => Combined((sm +: mappings)*)
+        case (sm1@SingleMapping, sm2@SingleMapping) => Combined(sm1, sm2)
+
+        case (TryBranch(suc, fail), otherMapping) => TryBranch(suc + otherMapping, fail)
+        case (mapping, TryBranch(suc, fail)) => TryBranch(mapping + suc, fail)
 
     /** EXERCISE 2
       *
@@ -113,7 +123,16 @@ object contact_processing2:
       * effects of the first one, unless it fails, and in that case, applying the effects of the
       * second one.
       */
-    def orElse(that: SchemaMapping2): SchemaMapping2 = ???
+    def orElse(that: SchemaMapping2): SchemaMapping2 =
+      (this, that) match
+        case (c1@Combined(mappings1*), c2@Combined(mappings2*)) => TryBranch(c1, Some(c2))
+        case (c@Combined(mappings*), sm@SingleMapping) => TryBranch(c, Some(sm))
+        case (sm@SingleMapping, c@Combined(mappings*)) => TryBranch(sm,  Some(c))
+        case (sm1@SingleMapping, sm2@SingleMapping) => TryBranch(sm1, Some(sm2))
+
+        case (TryBranch(suc, _), otherMapping) => TryBranch(suc, Some(otherMapping))
+        case (mapping, TryBranch(suc, fail)) => TryBranch(mapping + suc, fail)
+
   object SchemaMapping2:
 
     /** EXERCISE 3
