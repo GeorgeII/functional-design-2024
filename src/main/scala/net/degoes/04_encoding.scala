@@ -1,5 +1,8 @@
 package net.degoes
 
+import scala.collection.immutable.{AbstractSeq, LinearSeq}
+import scala.util.{Failure, Success, Try}
+
 /*
  * INTRODUCTION
  *
@@ -97,10 +100,14 @@ end education_executable
 object contact_processing2:
   import contact_processing.*
 
+  enum Operation:
+    case Rename(name: String, newName: String)
+    case Delete(name: String)
+
   enum SchemaMapping2:
     case Combined(mappings: SchemaMapping2*)
-    case SingleMapping
-    case TryBranch(success: SchemaMapping2, fail: Option[SchemaMapping2])
+    case SingleMapping(op: Operation)
+    case TryBranch(tryMapping: SchemaMapping2, ifFailed: SchemaMapping2)
 
     /** EXERCISE 1
       *
@@ -108,14 +115,14 @@ object contact_processing2:
       * of both in sequential order.
       */
     def +(that: SchemaMapping2): SchemaMapping2 =
+      // this pattern matching is only for optimization. It can be replaced with a one-liner `Combined(this, that)`.
       (this, that) match
         case (Combined(mappings1*), Combined(mappings2*)) => Combined((mappings1 ++ mappings2)*)
-        case (Combined(mappings*), sm@SingleMapping) => Combined((mappings :+ sm)*)
-        case (sm@SingleMapping, Combined(mappings*)) => Combined((sm +: mappings)*)
-        case (sm1@SingleMapping, sm2@SingleMapping) => Combined(sm1, sm2)
+        case (Combined(mappings*), sm@SingleMapping(_)) => Combined((mappings :+ sm)*)
+        case (sm@SingleMapping(_), Combined(mappings*)) => Combined((sm +: mappings)*)
+        case (sm1@SingleMapping(_), sm2@SingleMapping(_)) => Combined(sm1, sm2)
 
-        case (TryBranch(suc, fail), otherMapping) => TryBranch(suc + otherMapping, fail)
-        case (mapping, TryBranch(suc, fail)) => TryBranch(mapping + suc, fail)
+        case (mapping1, mapping2) => Combined(mapping1, mapping2)
 
     /** EXERCISE 2
       *
@@ -124,14 +131,7 @@ object contact_processing2:
       * second one.
       */
     def orElse(that: SchemaMapping2): SchemaMapping2 =
-      (this, that) match
-        case (c1@Combined(mappings1*), c2@Combined(mappings2*)) => TryBranch(c1, Some(c2))
-        case (c@Combined(mappings*), sm@SingleMapping) => TryBranch(c, Some(sm))
-        case (sm@SingleMapping, c@Combined(mappings*)) => TryBranch(sm,  Some(c))
-        case (sm1@SingleMapping, sm2@SingleMapping) => TryBranch(sm1, Some(sm2))
-
-        case (TryBranch(suc, _), otherMapping) => TryBranch(suc, Some(otherMapping))
-        case (mapping, TryBranch(suc, fail)) => TryBranch(mapping + suc, fail)
+      TryBranch(this, that)
 
   object SchemaMapping2:
 
@@ -139,20 +139,46 @@ object contact_processing2:
       *
       * Add a constructor for `SchemaMapping` models renaming the column name.
       */
-    def rename(oldName: String, newName: String): SchemaMapping2 = ???
+    def rename(oldName: String, newName: String): SchemaMapping2 =
+      SingleMapping(Operation.Rename(oldName, newName))
 
     /** EXERCISE 4
       *
       * Add a constructor for `SchemaMapping` that models deleting the column of the specified name.
       */
-    def delete(name: String): SchemaMapping2 = ???
+    def delete(name: String): SchemaMapping2 =
+      SingleMapping(Operation.Delete(name))
 
   /** EXERCISE 5
     *
     * Implement an interpreter for the `SchemaMapping` model that translates it into into changes on
     * the contact list.
     */
-  def run(mapping: SchemaMapping2, contacts: ContactsCSV): MappingResult[ContactsCSV] = ???
+  def run(mapping: SchemaMapping2, contacts: ContactsCSV): MappingResult[ContactsCSV] =
+    mapping match
+      case SchemaMapping2.SingleMapping(op) =>
+        op match
+          case Operation.Rename(name, newName) =>
+            Try(contacts.rename(name, newName)) match
+              case Failure(exception) => MappingResult.Failure(s"Couldn't rename $name to $newName" :: Nil)
+              case Success(value) => MappingResult.Success(value, warnings = Nil)
+          case Operation.Delete(name) =>
+            Try(contacts.delete(name)) match
+              case Failure(exception) => MappingResult.Failure(s"Couldn't delete $name" :: Nil)
+              case Success(value) => MappingResult.Success(value, warnings = Nil)
+
+      case SchemaMapping2.Combined(mappings@_*) =>
+        val recursivelyCalculatedMappings = mappings.map(mapping => run(mapping, contacts))
+        // if any calculation fails we fail the entire Combine case
+        recursivelyCalculatedMappings
+          .collect { case MappingResult.Failure(errors) => errors }.flatten match
+          case h :: t => MappingResult.Failure(h :: t)
+          case Nil    => MappingResult.Success(contacts, warnings = Nil)
+
+      case SchemaMapping2.TryBranch(tryMapping, ifFailed) =>
+        Try(run(tryMapping, contacts))
+          .fold(_ => run(ifFailed, contacts), identity)
+
 
   /** BONUS EXERCISE
     *
