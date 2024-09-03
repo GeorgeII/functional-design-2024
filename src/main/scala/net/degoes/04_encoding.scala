@@ -199,7 +199,14 @@ object email_filter2:
   final case class Email(sender: Address, to: List[Address], subject: String, body: String)
 
   enum EmailFilter:
-    case Dummy
+    case And(left: EmailFilter, right: EmailFilter)
+    case Or(left: EmailFilter, right: EmailFilter)
+    case Negate(filter: EmailFilter)
+
+    case SubjectContains(string: String)
+    case BodyContains(string: String)
+    case SenderIn(senders: Set[Address])
+    case RecipientIn(recipients: Set[Address])
 
     def self = this
 
@@ -208,21 +215,25 @@ object email_filter2:
       * Add an "and" operator that models matching an email if both the first and the second email
       * filter match the email.
       */
-    def &&(that: EmailFilter): EmailFilter = ???
+    def &&(that: EmailFilter): EmailFilter =
+      And(self, that)
 
     /** EXERCISE 2
       *
       * Add an "or" operator that models matching an email if either the first or the second email
       * filter match the email.
       */
-    def ||(that: EmailFilter): EmailFilter = ???
+    def ||(that: EmailFilter): EmailFilter =
+      Or(self, that)
 
     /** EXERCISE 3
       *
       * Add a "negate" operator that models matching an email if this email filter does NOT match an
       * email.
       */
-    def negate: EmailFilter = ???
+    def negate: EmailFilter =
+      Negate(self)
+
   end EmailFilter
   object EmailFilter:
 
@@ -231,28 +242,33 @@ object email_filter2:
       * Add a constructor for `EmailFilter` that models looking to see if the subject of an email
       * contains the specified word.
       */
-    def subjectContains(string: String): EmailFilter = ???
+    def subjectContains(string: String): EmailFilter =
+      SubjectContains(string)
 
     /** EXERCISE 5
       *
       * Add a constructor for `EmailFilter` that models looking to see if the body of an email
       * contains the specified word.
       */
-    def bodyContains(string: String): EmailFilter = ???
+    def bodyContains(string: String): EmailFilter =
+      BodyContains(string)
 
     /** EXERCISE 6
       *
       * Add a constructor for `EmailFilter` that models looking to see if the sender of an email is
       * in the specified set of senders.
       */
-    def senderIn(senders: Set[Address]): EmailFilter = ???
+    def senderIn(senders: Set[Address]): EmailFilter =
+      SenderIn(senders)
 
     /** EXERCISE 7
       *
       * Add a constructor for `EmailFilter` that models looking to see if the recipient of an email
       * is in the specified set of recipients.
       */
-    def recipientIn(recipients: Set[Address]): EmailFilter = ???
+    def recipientIn(recipients: Set[Address]): EmailFilter =
+      RecipientIn(recipients)
+
   end EmailFilter
 
   /** EXERCISE 8
@@ -261,7 +277,14 @@ object email_filter2:
     * specified email.
     */
   def matches(filter: EmailFilter, email: Email): Boolean =
-    ???
+    filter match
+      case EmailFilter.And(left, right) => matches(left, email) && matches(right, email)
+      case EmailFilter.Or(left, right) => matches(left, email) || matches(right, email)
+      case EmailFilter.Negate(filter) => !matches(filter, email)
+      case EmailFilter.SubjectContains(string) => email.subject.contains(string)
+      case EmailFilter.BodyContains(string) => email.body.contains(string)
+      case EmailFilter.SenderIn(senders) => senders.contains(email.sender)
+      case EmailFilter.RecipientIn(recipients) => (recipients intersect email.to.toSet).nonEmpty
 
   /** EXERCISE 9
     *
