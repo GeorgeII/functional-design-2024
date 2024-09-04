@@ -53,17 +53,25 @@ object email_filter3:
     case Never
     case And(left: EmailFilter, right: EmailFilter)
     case InclusiveOr(left: EmailFilter, right: EmailFilter)
-    case ExclusiveOr(left: EmailFilter, right: EmailFilter)
-    case SenderEquals(target: Address)
-    case SenderNotEquals(target: Address)
-    case RecipientEquals(target: Address)
-    case RecipientNotEquals(target: Address)
-    case SenderIn(targets: Set[Address])
-    case RecipientIn(targets: Set[Address])
-    case BodyContains(phrase: String)
-    case BodyNotContains(phrase: String)
-    case SubjectContains(phrase: String)
-    case SubjectNotContains(phrase: String)
+
+    // additional cases that I added
+    case Not(filter: EmailFilter)
+    case StringContains(phrase: String, f: Email => String)
+    case AddressesIntersect(addresses: Set[Address], f: Email => Set[Address])
+
+
+    // now every case below can be expressed by a combination of cases above
+//    case ExclusiveOr(left: EmailFilter, right: EmailFilter) // now can be expressed as And(Or(a, b), Not(And(a, b)))
+//    case SenderEquals(target: Address)
+//    case SenderNotEquals(target: Address)
+//    case RecipientEquals(target: Address)
+//    case RecipientNotEquals(target: Address)
+//    case SenderIn(targets: Set[Address])
+//    case RecipientIn(targets: Set[Address])
+//    case BodyContains(phrase: String)
+//    case BodyNotContains(phrase: String)
+//    case SubjectContains(phrase: String)
+//    case SubjectNotContains(phrase: String)
 
     def self = this
 
@@ -71,32 +79,33 @@ object email_filter3:
 
     def ||(that: EmailFilter): EmailFilter = EmailFilter.InclusiveOr(self, that)
 
-    def ^^(that: EmailFilter): EmailFilter = EmailFilter.ExclusiveOr(self, that)
+    def ^^(that: EmailFilter): EmailFilter = (self || that) && Not(self && that)
   end EmailFilter
   object EmailFilter:
     val always: EmailFilter = Always
 
     val never: EmailFilter = Never
 
-    def senderIs(sender: Address): EmailFilter = SenderEquals(sender)
+    def senderIs(sender: Address): EmailFilter = AddressesIntersect(Set(sender), email => Set(email.sender))
 
-    def senderIsNot(sender: Address): EmailFilter = SenderNotEquals(sender)
+    def senderIsNot(sender: Address): EmailFilter = Not(senderIs(sender))
 
-    def recipientIs(recipient: Address): EmailFilter = RecipientEquals(recipient)
+    def recipientIs(recipient: Address): EmailFilter = AddressesIntersect(Set(recipient), _.to.toSet)
 
-    def recipientIsNot(recipient: Address): EmailFilter = RecipientNotEquals(recipient)
+    def recipientIsNot(recipient: Address): EmailFilter = Not(recipientIs(recipient))
 
-    def senderIn(senders: Set[Address]): EmailFilter = SenderIn(senders)
+    def senderIn(senders: Set[Address]): EmailFilter = AddressesIntersect(senders, email => Set(email.sender))
 
-    def recipientIn(recipients: Set[Address]): EmailFilter = RecipientIn(recipients)
+    def recipientIn(recipients: Set[Address]): EmailFilter = AddressesIntersect(recipients, _.to.toSet)
 
-    def bodyContains(phrase: String): EmailFilter = BodyContains(phrase)
+    def bodyContains(phrase: String): EmailFilter = StringContains(phrase, _.body)
 
-    def bodyDoesNotContain(phrase: String): EmailFilter = BodyNotContains(phrase)
+    def bodyDoesNotContain(phrase: String): EmailFilter = Not(bodyContains(phrase))
 
-    def subjectContains(phrase: String): EmailFilter = SubjectContains(phrase)
+    def subjectContains(phrase: String): EmailFilter = StringContains(phrase, _.subject)
 
-    def subjectDoesNotContain(phrase: String): EmailFilter = SubjectNotContains(phrase)
+    def subjectDoesNotContain(phrase: String): EmailFilter = Not(subjectContains(phrase))
+
   end EmailFilter
 end email_filter3
 
