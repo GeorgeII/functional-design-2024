@@ -1,5 +1,7 @@
 package net.degoes
 
+import net.degoes.ui_components.declarative.Action.Draw
+
 /*
  * INTRODUCTION
  *
@@ -137,15 +139,32 @@ object ui_components:
       * The following API is not composable—there is no domain. Introduce a domain with elements,
       * constructors, and composable operators. Use a declarative model.
       */
+
+    enum Action:
+      case TurnLeft(degrees: Int)
+      case TurnRight(degrees: Int)
+      case GoForward
+      case GoBackward
+      case Draw
+
+      // similar to `And` or `Concatenate`. It should be used to make an ordered sequence of actions.
+      case Then(action: Action, nextAction: Action)
+
     trait Turtle:
       self =>
-      def turnLeft(degrees: Int): Unit
+      def turnLeft(degrees: Int): Action =
+        Action.TurnLeft(degrees)
 
-      def turnRight(degrees: Int): Unit
+      def turnRight(degrees: Int): Action =
+        Action.TurnRight(degrees)
 
-      def goForward(): Unit
+      def goForward(): Action =
+        Action.GoForward
 
-      def goBackward(): Unit
+      def goBackward(): Action =
+        Action.GoBackward
 
-      def draw(): Unit
+      def draw(): Action =
+        Draw
+
 end ui_components
